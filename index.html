@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Spelly the Bear’s Spelling Adventure</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css"></head><body>
+<div class="bg" id="bg" aria-hidden="true"></div>
+<div class="toast" id="toast" role="status"></div>
+<canvas id="cv" aria-hidden="true"></canvas>
+
+<main class="screen on" id="auth">
+ <section class="auth-card">
+  <h1>Spelly’s Spelling Adventure!</h1>
+  <div class="mascot" aria-hidden="true">🐻</div>
+  <h2 id="auth-title">Welcome back!</h2>
+  <p class="auth-intro" id="auth-intro">Sign in to start your spelling adventure.</p>
+  <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
+  <form id="auth-form">
+   <label for="auth-email">Email</label>
+   <input id="auth-email" name="email" type="email" autocomplete="email" required>
+   <label for="auth-password">Password</label>
+   <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="6" required>
+   <button class="big auth-submit" id="auth-submit" type="submit">Log in</button>
+  </form>
+  <button class="auth-switch" id="auth-switch" type="button">New here? Create an account</button>
+ </section>
+</main>
+
+<main class="screen" id="home">
+ <div class="account-bar"><span id="account-email"></span><button class="auth-switch" id="sign-out" type="button">Log out</button></div>
+ <h1>Spelly’s Spelling Adventure!</h1>
+ <div class="mascot" id="hm" title="Tap me!">🐻</div>
+ <div class="bubble" id="hb">Hi friend! Let’s spell some words!</div>
+ <button class="big" style="background:var(--grn)" data-l="easy">🌱 Easy <small>short words</small></button>
+ <button class="big" style="background:var(--blu)" data-l="medium">🚀 Medium <small>5–6 letters</small></button>
+ <button class="big" style="background:var(--pur)" data-l="hard">🐉 Hard <small>7+ letters + tricky extras</small></button>
+ <div class="shelf">⭐ <span id="tot">0</span> points · Sticker book<div id="stk"></div></div>
+</main>
+
+<main class="screen" id="game">
+ <div class="hud"><span class="pill" id="hearts">❤️❤️❤️</span><span class="pill" id="streak">🔥 0</span><span class="pill">⭐ <span id="sc">0</span></span></div>
+ <div class="bar" role="progressbar" aria-label="Progress"><i id="pg"></i></div>
+ <div class="stage"><span class="mini" id="gm">🐻</span><div class="pic" id="pic" role="img" aria-label="Picture"></div></div>
+ <div class="bubble" id="gb">Spell the word!</div>
+ <div class="row" id="slots"></div>
+ <div class="row" id="tiles"></div>
+ <div class="ctl"><button class="big hear" id="hear">🔊 Say it</button><button class="big" style="background:var(--pink)" id="clr">↩️ Clear</button><button class="big" style="background:var(--pur)" id="home2">🏠</button></div>
+</main>
+
+<main class="screen" id="map"><h1 id="mh"></h1><div class="bubble">Finish a level to unlock the next one!</div><div class="grid" id="lg"></div><button class="big" style="background:var(--pink)" id="mback">🏠 Home</button></main>
+
+<div class="modal" id="md"><div class="box"><div class="e" id="me"></div><h2 id="mt"></h2><p id="mp"></p><button class="big" style="background:var(--grn)" id="mb">Keep going!</button></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="script.js"></script></body></html>
