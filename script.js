@@ -21,9 +21,36 @@ function mk(){const seen=new Set(),a=[];RAW.split(/\s+/).forEach(t=>{const m=t.m
  let s=7;const r=()=>(s=(s*16807)%2147483647)/2147483647;for(let i=a.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[a[i],a[j]]=[a[j],a[i]]}
  return{easy:a.filter(w=>w[0].length<=4),medium:a.filter(w=>w[0].length>4&&w[0].length<7),hard:a.filter(w=>w[0].length>=7)}}
 const WORDS=mk(),LV=6,nLv=l=>Math.max(1,Math.floor(WORDS[l].length/LV));
-let PR={easy:{},medium:{},hard:{}},ML='easy';
-try{PR=Object.assign(PR,JSON.parse(localStorage.getItem('spellyP')||'{}'))}catch(e){}
-function openMap(l){ML=l;$('#mh').textContent={easy:'🌱 Easy',medium:'🚀 Medium',hard:'🐉 Hard'}[l];const c={easy:'var(--grn)',medium:'var(--blu)',hard:'var(--pur)'}[l];
+const emptyProgress=()=>({easy:{},medium:{},hard:{}});
+let PR=emptyProgress(),ML='easy',currentProgressUserId=null,progressLoaded=false,progressLoadPromise=null;
+function setProgressStatus(message,error=false){const status=$('#progress-status');status.textContent=message;status.hidden=!message;status.classList.toggle('error',error)}
+async function loadUserProgress(userId){
+ const {data,error}=await supabaseClient.from('level_progress').select('difficulty,level,stars').eq('user_id',userId);
+ if(error)throw error;
+ if(userId!==currentProgressUserId)return;
+ const progress=emptyProgress();
+ for(const row of data){
+  if(!['easy','medium','hard'].includes(row.difficulty)||!Number.isInteger(row.level)||!Number.isInteger(row.stars))continue;
+  progress[row.difficulty][row.level]=row.stars;
+ }
+ PR=progress;progressLoaded=true;setProgressStatus('');
+}
+async function ensureUserProgress(){
+ if(progressLoaded)return;
+ if(!currentProgressUserId)throw new Error('You must be signed in to load saved levels.');
+ if(!progressLoadPromise){
+  const userId=currentProgressUserId;
+  const request=loadUserProgress(userId).catch(error=>{
+   if(userId===currentProgressUserId)setProgressStatus('Could not load your saved levels. Check your connection and try again.',true);
+   throw error;
+  }).finally(()=>{if(progressLoadPromise===request)progressLoadPromise=null});
+  progressLoadPromise=request;
+ }
+ return progressLoadPromise;
+}
+async function openMap(l){
+ try{await ensureUserProgress()}catch(error){console.error('Could not load saved level progress:',error);return}
+ ML=l;$('#mh').textContent={easy:'🌱 Easy',medium:'🚀 Medium',hard:'🐉 Hard'}[l];const c={easy:'var(--grn)',medium:'var(--blu)',hard:'var(--pur)'}[l];
  $('#lg').innerHTML=Array.from({length:nLv(l)},(_,i)=>{const n=i+1,ok=n==1||PR[l][n-1],st=PR[l][n];return `<button class="lv ${ok?'':'lk'}" style="--c:${c}" data-n="${n}" ${ok?'':'disabled'}>${ok?n:'🔒'}<small>${st?'⭐'.repeat(st):ok?'play':''}</small></button>`}).join('');show('map')}
 const STK=[['🦄',30],['🐲',80],['🚀',150],['👑',240],['🏆',350],['🌟',500]];
 const CHEER=['Amazing!','You got it!','Great job!','Super star!','Fantastic!','Wow, brilliant!'];
@@ -106,11 +133,24 @@ function wrong(){
   if(S.lives<=0){say('Oh no! Let’s try again!');modal('😢','Out of hearts!','You scored '+S.sc+' points. Let’s try again!','Play again',()=>start(S.l,S.n));return}
   S.slots.fill(null);S.lock=false;draw()},700);
 }
-function finish(){
+async function finish(){
  $('#pg').style.width='100%';sfx.win();confetti(250);setTimeout(()=>confetti(150),500);
  const stars=S.lives>=3?3:S.lives==2?2:1;
  say('Level complete! You are a spelling champion!');
- PR[S.l][S.n]=Math.max(PR[S.l][S.n]||0,stars);try{localStorage.setItem('spellyP',JSON.stringify(PR))}catch(e){}
+ const userId=currentProgressUserId,level=S.n,difficulty=S.l;
+ const bestStars=Math.max(stars,PR[difficulty][level]||0);
+ try{
+  const {error}=await supabaseClient.from('level_progress').upsert(
+   {user_id:userId,difficulty,level,stars:bestStars},
+   {onConflict:'user_id,difficulty,level'}
+  );
+  if(error)throw error;
+  if(userId===currentProgressUserId)setProgressStatus('');
+ }catch(error){
+  console.error('Could not save level progress:',error);
+  if(userId===currentProgressUserId)setProgressStatus('Your level was completed, but progress could not be saved. Check your connection and try again.',true);
+ }
+ PR[difficulty][level]=bestStars;
  const more=S.n<nLv(S.l);
  modal('🏆','Level '+S.n+' complete!','⭐'.repeat(stars)+'☆'.repeat(3-stars)+'  ·  '+S.sc+' points  ·  Best streak '+S.best,more?'Next level ▶':'Level map',()=>{shelf();more?start(S.l,S.n+1):openMap(S.l)});
 }
@@ -139,6 +179,7 @@ const authEmailField = $('#auth-email-field');
 const authSubmit = $('#auth-submit');
 const authSwitch = $('#auth-switch');
 const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,24}$/;
+let authScreenRevision = 0;
 
 function setAuthMessage(message, type = 'error') {
   authMessage.textContent = message;
@@ -167,14 +208,44 @@ function setAuthMode(registering) {
   setAuthMessage('');
 }
 
-function updateAuthScreen(user) {
+async function updateAuthScreen(user) {
+  const revision = ++authScreenRevision;
   if (user) {
-    $('#account-email').textContent = user.email || 'Signed in';
+    currentProgressUserId=user.id;
+    progressLoaded=false;
+    progressLoadPromise=null;
+    PR=emptyProgress();
+    setProgressStatus('Loading your saved levels…');
+    ensureUserProgress().catch(error=>console.error('Could not load saved level progress:',error));
+    const username = user.user_metadata?.username;
+    const accountLabel = $('#account-username');
+    accountLabel.textContent = username ? `@${username}` : user.email || 'Signed in';
     shelf();
     show('home');
+
+    if (!username && supabaseClient) {
+      const { data: profile, error } = await supabaseClient
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (revision !== authScreenRevision) return;
+      if (error) {
+        console.error('Could not load the signed-in username:', error.message);
+        return;
+      }
+      if (profile?.username) accountLabel.textContent = `@${profile.username}`;
+    }
     return;
   }
 
+  currentProgressUserId=null;
+  progressLoaded=false;
+  progressLoadPromise=null;
+  PR=emptyProgress();
+  setProgressStatus('');
+  $('#account-username').textContent = '';
   $('#md').classList.remove('on');
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   show('auth');
