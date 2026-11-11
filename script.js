@@ -133,8 +133,12 @@ let isSubmittingAuth = false;
 const authForm = $('#auth-form');
 const authMessage = $('#auth-message');
 const authPassword = $('#auth-password');
+const authUsername = $('#auth-username');
+const authEmail = $('#auth-email');
+const authEmailField = $('#auth-email-field');
 const authSubmit = $('#auth-submit');
 const authSwitch = $('#auth-switch');
+const USERNAME_PATTERN = /^[a-zA-Z0-9_]{3,24}$/;
 
 function setAuthMessage(message, type = 'error') {
   authMessage.textContent = message;
@@ -145,8 +149,16 @@ function setAuthMode(registering) {
   isRegistering = registering;
   $('#auth-title').textContent = registering ? 'Create your account' : 'Welcome back!';
   $('#auth-intro').textContent = registering
-    ? 'Create an account to start your spelling adventure.'
+    ? 'Choose a username and add your email to create an account.'
     : 'Sign in to start your spelling adventure.';
+  $('#auth-username-label').textContent = registering ? 'Username' : 'Username or email';
+  authUsername.autocomplete = 'username';
+  authUsername.placeholder = registering ? '3–24 letters, numbers, or underscores' : 'Username or email';
+  authUsername.minLength = registering ? 3 : 1;
+  authUsername.maxLength = registering ? 24 : 254;
+  authEmailField.hidden = !registering;
+  authEmail.required = registering;
+  authUsername.setCustomValidity('');
   authSubmit.textContent = registering ? 'Create account' : 'Log in';
   authPassword.autocomplete = registering ? 'new-password' : 'current-password';
   authSwitch.textContent = registering
@@ -169,6 +181,8 @@ function updateAuthScreen(user) {
 }
 
 authSwitch.onclick = () => setAuthMode(!isRegistering);
+authUsername.addEventListener('input', () => authUsername.setCustomValidity(''));
+setAuthMode(false);
 
 authForm.onsubmit = async event => {
   event.preventDefault();
@@ -182,19 +196,59 @@ authForm.onsubmit = async event => {
     return;
   }
 
+  const formData = new FormData(authForm);
+  const usernameOrEmail = String(formData.get('username')).trim();
+  const password = String(formData.get('password'));
+  const username = usernameOrEmail.toLowerCase();
+  const isUsernameLogin = !isRegistering && !usernameOrEmail.includes('@');
+
+  if (isRegistering && !USERNAME_PATTERN.test(usernameOrEmail)) {
+    authUsername.setCustomValidity('Use 3–24 letters, numbers, or underscores.');
+    authUsername.reportValidity();
+    return;
+  }
+
   isSubmittingAuth = true;
   authSubmit.disabled = true;
   authSwitch.disabled = true;
   setAuthMessage(isRegistering ? 'Creating your account…' : 'Signing in…', 'success');
 
-  const formData = new FormData(authForm);
-  const email = String(formData.get('email')).trim();
-  const password = String(formData.get('password'));
-
   try {
-    const { data, error } = isRegistering
-      ? await supabaseClient.auth.signUp({ email, password })
-      : await supabaseClient.auth.signInWithPassword({ email, password });
+    let data;
+    let error;
+
+    if (isRegistering) {
+      const result = await supabaseClient.auth.signUp({
+        email: String(formData.get('email')).trim(),
+        password,
+        options: { data: { username } }
+      });
+      data = result.data;
+      error = result.error;
+    } else if (usernameOrEmail.includes('@')) {
+      const result = await supabaseClient.auth.signInWithPassword({
+        email: usernameOrEmail,
+        password
+      });
+      data = result.data;
+      error = result.error;
+    } else {
+      const result = await supabaseClient.functions.invoke('login-with-username', {
+        body: { username, password }
+      });
+      data = result.data;
+      error = result.error;
+      if (!error && data?.access_token && data?.refresh_token) {
+        const sessionResult = await supabaseClient.auth.setSession({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token
+        });
+        data.user = sessionResult.data.user;
+        error = sessionResult.error;
+      } else if (!error) {
+        error = new Error(data?.error || 'Invalid username or password.');
+      }
+    }
 
     if (error) throw error;
 
@@ -207,7 +261,14 @@ authForm.onsubmit = async event => {
       updateAuthScreen(data.user);
     }
   } catch (error) {
-    setAuthMessage(error.message || 'Authentication failed. Please try again.');
+    const message = error.message || 'Authentication failed. Please try again.';
+    setAuthMessage(
+      isUsernameLogin && error.context?.status === 404
+        ? 'Username login is not deployed yet. Follow the setup steps in README.md.'
+        : isUsernameLogin && [400, 401].includes(error.context?.status)
+        ? 'Invalid username or password.'
+        : message
+    );
   } finally {
     isSubmittingAuth = false;
     authSubmit.disabled = false;

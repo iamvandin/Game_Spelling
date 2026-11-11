@@ -16,10 +16,14 @@
   <p class="auth-intro" id="auth-intro">Sign in to start your spelling adventure.</p>
   <p class="auth-message" id="auth-message" role="status" aria-live="polite"></p>
   <form id="auth-form">
-   <label for="auth-email">Email</label>
-   <input id="auth-email" name="email" type="email" autocomplete="email" required>
+   <label for="auth-username" id="auth-username-label">Username or email</label>
+   <input id="auth-username" name="username" type="text" autocomplete="username" minlength="1" maxlength="254" required>
+   <div id="auth-email-field" hidden>
+    <label for="auth-email">Email</label>
+    <input id="auth-email" name="email" type="email" autocomplete="email">
+   </div>
    <label for="auth-password">Password</label>
-   <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="6" required>
+   <input id="auth-password" name="password" type="password" autocomplete="current-password" minlength="6" maxlength="256" required>
    <button class="big auth-submit" id="auth-submit" type="submit">Log in</button>
   </form>
   <button class="auth-switch" id="auth-switch" type="button">New here? Create an account</button>
